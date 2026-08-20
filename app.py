@@ -20,6 +20,7 @@ from config import (
     CHECKPOINT_PATH,
     EDA_DIR,
     EPOCHS,
+    EVALUATION_SUMMARY_PATH,
     LEARNING_RATE,
     NOISE_FACTOR,
     RANDOM_SEED,
@@ -33,6 +34,11 @@ from config import (
     WHOLE_IMAGE_RECONSTRUCTIONS_PATH,
 )
 from eda import run_eda
+from evaluation import (
+    calculate_image_metrics,
+    save_evaluation_results,
+    summarize_metrics,
+)
 from load_data import (
     load_and_preprocess_datasets,
     load_and_preprocess_full_images,
@@ -85,39 +91,6 @@ def create_fixed_noisy_images(clean_images, seed):
         0.0,
         1.0,
     ).astype(np.float32)
-
-
-def calculate_reconstruction_metrics(
-    clean_images,
-    noisy_images,
-    decoded_images,
-    content_masks=None,
-):
-    if content_masks is None:
-        content_masks = np.ones(
-            (*clean_images.shape[:-1], 1),
-            dtype=np.float32,
-        )
-
-    channel_masks = np.broadcast_to(content_masks, clean_images.shape)
-    num_values = np.sum(channel_masks)
-
-    noisy_mse = (
-        np.sum((noisy_images - clean_images) ** 2 * channel_masks) / num_values
-    )
-    reconstruction_mse = (
-        np.sum((decoded_images - clean_images) ** 2 * channel_masks)
-        / num_values
-    )
-    improvement = noisy_mse - reconstruction_mse
-    relative_improvement = improvement / noisy_mse * 100.0
-
-    return {
-        "noisy_mse": float(noisy_mse),
-        "reconstruction_mse": float(reconstruction_mse),
-        "improvement": float(improvement),
-        "relative_improvement": float(relative_improvement),
-    }
 
 
 def describe_result(metrics):
@@ -436,11 +409,12 @@ history = autoencoder.fit(
 x_test_noisy = create_fixed_noisy_images(x_test, RANDOM_SEED + 2)
 decoded_tiles = autoencoder.predict(x_test_noisy, verbose=0)
 tile_test_loss = autoencoder.evaluate(x_test_noisy, x_test, verbose=0)
-tile_metrics = calculate_reconstruction_metrics(
+tile_metric_values = calculate_image_metrics(
     x_test,
     x_test_noisy,
     decoded_tiles,
 )
+tile_metrics = summarize_metrics(tile_metric_values)
 
 
 # ============================================================
@@ -458,12 +432,13 @@ decoded_whole_images = autoencoder.predict(
     x_test_whole_noisy,
     verbose=0,
 )
-whole_image_metrics = calculate_reconstruction_metrics(
+whole_image_metric_values = calculate_image_metrics(
     x_test_whole,
     x_test_whole_noisy,
     decoded_whole_images,
     whole_content_masks,
 )
+whole_image_metrics = summarize_metrics(whole_image_metric_values)
 
 
 # ============================================================
@@ -472,6 +447,15 @@ whole_image_metrics = calculate_reconstruction_metrics(
 
 best_epoch = np.argmin(history.history["val_loss"]) + 1
 best_val_loss = np.min(history.history["val_loss"])
+
+save_evaluation_results(
+    history.history,
+    tile_metric_values,
+    whole_image_metric_values,
+    tile_metrics,
+    whole_image_metrics,
+    image_splits["test"],
+)
 
 print(
     f"\nTräningsresultat\n"
@@ -494,6 +478,12 @@ print(
     f"MSE-förbättring:         {tile_metrics['improvement']:.6f}\n"
     f"Relativ förbättring:     "
     f"{tile_metrics['relative_improvement']:.2f}%\n"
+    f"Brusig baseline-MAE:     {tile_metrics['noisy_mae']:.6f}\n"
+    f"Rekonstruktions-MAE:     {tile_metrics['reconstruction_mae']:.6f}\n"
+    f"Brusig baseline-PSNR:    {tile_metrics['noisy_psnr']:.3f} dB\n"
+    f"Rekonstruktions-PSNR:    {tile_metrics['reconstruction_psnr']:.3f} dB\n"
+    f"Brusig baseline-SSIM:    {tile_metrics['noisy_ssim']:.4f}\n"
+    f"Rekonstruktions-SSIM:    {tile_metrics['reconstruction_ssim']:.4f}\n"
     f"Resultat: {describe_result(tile_metrics)}"
 )
 
@@ -509,6 +499,16 @@ print(
     f"{whole_image_metrics['improvement']:.6f}\n"
     f"Relativ förbättring:      "
     f"{whole_image_metrics['relative_improvement']:.2f}%\n"
+    f"Brusig baseline-MAE:      {whole_image_metrics['noisy_mae']:.6f}\n"
+    f"Rekonstruktions-MAE:      "
+    f"{whole_image_metrics['reconstruction_mae']:.6f}\n"
+    f"Brusig baseline-PSNR:     "
+    f"{whole_image_metrics['noisy_psnr']:.3f} dB\n"
+    f"Rekonstruktions-PSNR:     "
+    f"{whole_image_metrics['reconstruction_psnr']:.3f} dB\n"
+    f"Brusig baseline-SSIM:     {whole_image_metrics['noisy_ssim']:.4f}\n"
+    f"Rekonstruktions-SSIM:     "
+    f"{whole_image_metrics['reconstruction_ssim']:.4f}\n"
     f"Resultat: {describe_result(whole_image_metrics)}"
 )
 
@@ -570,6 +570,7 @@ print(
     f"-------------\n"
     f"EDA:                     {EDA_DIR}\n"
     f"Checkpoint:              {CHECKPOINT_PATH}\n"
+    f"Utvärderingsrapport:      {EVALUATION_SUMMARY_PATH}\n"
     f"Träningshistorik:        {TRAINING_HISTORY_PATH}\n"
     f"Tile-rekonstruktioner:   {TILE_RECONSTRUCTIONS_PATH}\n"
     f"Helbildsrekonstruktioner: {WHOLE_IMAGE_RECONSTRUCTIONS_PATH}"

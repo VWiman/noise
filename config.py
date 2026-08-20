@@ -21,8 +21,8 @@ TEST_PERCENT = 10
 
 RANDOM_SEED = 42
 TILE_SIZE = 256
-BATCH_SIZE = 2
-EPOCHS = 4
+BATCH_SIZE = 6
+EPOCHS = 200
 NOISE_FACTOR = 0.25
 LEARNING_RATE = 0.0001
 
@@ -40,6 +40,11 @@ CHECKPOINT_PATH = CHECKPOINT_DIR / "best_denoising_unet.keras"
 EDA_OVERVIEW_PATH = EDA_DIR / "dataset_overview.png"
 EDA_SAMPLES_PATH = EDA_DIR / "sample_train_tiles.png"
 EDA_SUMMARY_PATH = EDA_DIR / "eda_summary.txt"
+EVALUATION_SUMMARY_PATH = RESULTS_DIR / "evaluation_summary.txt"
+METRIC_COMPARISON_PATH = RESULTS_DIR / "metric_comparison.png"
+TILE_METRICS_PATH = RESULTS_DIR / "tile_metrics.csv"
+WHOLE_IMAGE_METRICS_PATH = RESULTS_DIR / "whole_image_metrics.csv"
+TRAINING_HISTORY_DATA_PATH = RESULTS_DIR / "training_history.csv"
 TRAINING_HISTORY_PATH = RESULTS_DIR / "training_history.png"
 TILE_RECONSTRUCTIONS_PATH = RESULTS_DIR / "reconstructions.png"
 WHOLE_IMAGE_RECONSTRUCTIONS_PATH = (

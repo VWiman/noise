@@ -24,11 +24,25 @@ Modellen är en deterministisk denoising autoencoder med U-Net-struktur. Encoder
 
 Modellen optimeras med Adam och MSE loss. EarlyStopping använder validation loss och den bästa modellen sparas automatiskt.
 
+## Utvärdering
+
+En classification report och confusion matrix används inte eftersom modellen rekonstruerar kontinuerliga pixelvärden i stället för att förutsäga klasser. Efter träningen jämförs den brusiga baselinen och modellens rekonstruktion med följande mått:
+
+- MSE och MAE, där lägre värden är bättre.
+- PSNR och SSIM, där högre värden är bättre.
+
+Måtten beräknas separat för test-tiles och hela testbilder. För helbilderna räknas endast den verkliga bildytan, inte paddingen.
+
 ## Outputs
 
 - `outputs/eda/` innehåller EDA-figurer och en textsammanfattning.
 - `outputs/checkpoint/` innehåller den bästa sparade modellen.
 - `outputs/results/training_history.png` visar training och validation loss.
+- `outputs/results/training_history.csv` innehåller loss per epoch.
+- `outputs/results/evaluation_summary.txt` innehåller den samlade utvärderingsrapporten.
+- `outputs/results/tile_metrics.csv` innehåller mått per test-tile.
+- `outputs/results/whole_image_metrics.csv` innehåller mått per testbild.
+- `outputs/results/metric_comparison.png` jämför baseline och rekonstruktion.
 - `outputs/results/reconstructions.png` visar testresultat för tiles.
 - `outputs/results/whole_image_reconstructions.png` visar testresultat för hela bilder.
 
