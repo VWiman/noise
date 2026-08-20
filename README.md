@@ -11,8 +11,8 @@ Projektet tränar en U-Net-modell med skip connections för att ta bort Gaussisk
 3. Uppdelningen sker innan tiles skapas. Tiles från samma originalbild kan därför inte hamna i olika splits.
 4. Varje bild centreras och delas upp i kompletta tiles på 256×256 pixlar. Bilddelar som inte fyller en hel tile används inte.
 5. En enkel EDA körs före träningen och sparas i `outputs/eda/`.
-6. Modellen tränas endast på tiles från train-splitten. Nytt brus skapas dynamiskt under träningen och den rena tilen används som target.
-7. Validation loss beräknas på tiles från val-splitten med samma fasta brus under varje epoch.
+6. Modellen tränas endast på tiles från train-splitten. Varje tile får en egen slumpad brusnivå mellan `MIN_NOISE` och `MAX_NOISE`, och den rena tilen används som target.
+7. Validation loss beräknas på tiles från val-splitten med den fasta brusnivån `VAL_NOISE`. Samma brusnivå används även för båda testerna.
 8. Efter träningen testas modellen på tiles från test-splitten.
 9. Modellen testas även på hela originalbilder från test-splitten. Längsta sidan skalas ned till maximalt 256 pixlar, proportionerna bevaras och bilden paddas till 256×256.
 

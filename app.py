@@ -22,7 +22,8 @@ from config import (
     EPOCHS,
     EVALUATION_SUMMARY_PATH,
     LEARNING_RATE,
-    NOISE_FACTOR,
+    MAX_NOISE,
+    MIN_NOISE,
     RANDOM_SEED,
     RESULTS_DIR,
     TEST_PERCENT,
@@ -30,6 +31,7 @@ from config import (
     TILE_SIZE,
     TRAIN_PERCENT,
     TRAINING_HISTORY_PATH,
+    VAL_NOISE,
     VAL_PERCENT,
     WHOLE_IMAGE_RECONSTRUCTIONS_PATH,
 )
@@ -78,7 +80,7 @@ def create_kernel_initializer(seed_offset):
     return GlorotUniform(seed=RANDOM_SEED + seed_offset)
 
 
-def create_fixed_noisy_images(clean_images, seed):
+def create_fixed_noisy_images(clean_images, seed, noise_factor):
     random_generator = np.random.default_rng(seed)
     noise = random_generator.normal(
         loc=0.0,
@@ -87,7 +89,7 @@ def create_fixed_noisy_images(clean_images, seed):
     ).astype(np.float32)
 
     return np.clip(
-        clean_images + NOISE_FACTOR * noise,
+        clean_images + noise_factor * noise,
         0.0,
         1.0,
     ).astype(np.float32)
@@ -185,6 +187,9 @@ print(
     f"{tile_counts['test']} tiles\n"
     f"Tile-shape: {x_train.shape[1:]}, datatyp: {x_train.dtype}\n"
     f"Träning: endast tiles från train-splitten\n"
+    f"Train-brus: slumpas per tile mellan {MIN_NOISE:.2f} och "
+    f"{MAX_NOISE:.2f}\n"
+    f"Val/test-brus: fast nivå {VAL_NOISE:.2f}\n"
     f"Helbilder: används endast för test efter träningen"
 )
 
@@ -210,10 +215,17 @@ run_eda(
 
 
 def add_training_noise(clean_image):
+    # Varje train-tile får en egen slumpad brusnivå.
+    noise_factor = tf.random.uniform(
+        shape=[],
+        minval=MIN_NOISE,
+        maxval=MAX_NOISE,
+        dtype=clean_image.dtype,
+    )
     noise = tf.random.normal(
         shape=tf.shape(clean_image),
         mean=0.0,
-        stddev=NOISE_FACTOR,
+        stddev=noise_factor,
         dtype=clean_image.dtype,
     )
     noisy_image = tf.clip_by_value(clean_image + noise, 0.0, 1.0)
@@ -240,7 +252,11 @@ train_dataset = train_dataset.batch(BATCH_SIZE)
 train_dataset = train_dataset.prefetch(tf.data.AUTOTUNE)
 
 # Samma val-brus används varje epoch så att validation loss blir jämförbar.
-x_val_noisy = create_fixed_noisy_images(x_val, RANDOM_SEED + 1)
+x_val_noisy = create_fixed_noisy_images(
+    x_val,
+    RANDOM_SEED + 1,
+    VAL_NOISE,
+)
 
 
 # ============================================================
@@ -406,7 +422,11 @@ history = autoencoder.fit(
 # ============================================================
 
 # Testdatan används först efter att träningen är avslutad.
-x_test_noisy = create_fixed_noisy_images(x_test, RANDOM_SEED + 2)
+x_test_noisy = create_fixed_noisy_images(
+    x_test,
+    RANDOM_SEED + 2,
+    VAL_NOISE,
+)
 decoded_tiles = autoencoder.predict(x_test_noisy, verbose=0)
 tile_test_loss = autoencoder.evaluate(x_test_noisy, x_test, verbose=0)
 tile_metric_values = calculate_image_metrics(
@@ -427,6 +447,7 @@ x_test_whole, whole_content_masks = materialize_full_images(whole_image_dataset)
 x_test_whole_noisy = create_fixed_noisy_images(
     x_test_whole,
     RANDOM_SEED + 3,
+    VAL_NOISE,
 )
 decoded_whole_images = autoencoder.predict(
     x_test_whole_noisy,
