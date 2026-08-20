@@ -1,0 +1,37 @@
+Utvärderingsrapport för Denoising U-Net
+========================================
+
+MSE och MAE ska minska. PSNR och SSIM ska öka.
+Värdena redovisas som medelvärden per exempel.
+
+Testresultat: tiles
+-------------------
+Antal exempel: 129
+MSE, brusig:        0.032434 ± 0.003392
+MSE, rekonstruerad: 0.001794 ± 0.001377
+Relativ MSE-förbättring: 94.47%
+MAE, brusig:        0.143105 ± 0.010331
+MAE, rekonstruerad: 0.029391 ± 0.010770
+Relativ MAE-förbättring: 79.46%
+PSNR, brusig:        14.915 dB
+PSNR, rekonstruerad: 28.536 dB
+PSNR-förbättring:     13.622 dB
+SSIM, brusig:        0.1350
+SSIM, rekonstruerad: 0.7749
+SSIM-förbättring:     0.6399
+
+Testresultat: hela bilder
+-------------------------
+Antal exempel: 12
+MSE, brusig:        0.032815 ± 0.002344
+MSE, rekonstruerad: 0.002410 ± 0.001048
+Relativ MSE-förbättring: 92.65%
+MAE, brusig:        0.144519 ± 0.006411
+MAE, rekonstruerad: 0.035029 ± 0.008604
+Relativ MAE-förbättring: 75.76%
+PSNR, brusig:        14.850 dB
+PSNR, rekonstruerad: 26.554 dB
+PSNR-förbättring:     11.703 dB
+SSIM, brusig:        0.1928
+SSIM, rekonstruerad: 0.7627
+SSIM-förbättring:     0.5699

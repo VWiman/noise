@@ -8,9 +8,6 @@ Desktop.ini
 /dataset/
 /data/
 
-# Genererade modeller, figurer och analyser
-/outputs/
-
 # Python-cache och testresultat
 __pycache__/
 *.py[cod]

@@ -1,0 +1,29 @@
+Explorativ dataanalys
+=====================
+
+Originalbilder och tiles
+-------------------------
+Train: 94 originalbilder, 1065 tiles, 11.3 tiles per bild
+Val: 12 originalbilder, 126 tiles, 10.5 tiles per bild
+Test: 12 originalbilder, 129 tiles, 10.8 tiles per bild
+
+Bilddimensioner, min/median/max
+--------------------------------
+Train: höjd 450/1200/1646, bredd 800/800/800 px
+Val: höjd 533/1132/1422, bredd 800/800/800 px
+Test: höjd 533/1134/1422, bredd 800/800/800 px
+
+Pixelstatistik för tiles, RGB
+-------------------------------
+Train mean: R=0.440, G=0.437, B=0.385
+Train std:  R=0.294, G=0.275, B=0.294
+Val mean: R=0.502, G=0.500, B=0.450
+Val std:  R=0.292, G=0.274, B=0.308
+Test mean: R=0.450, G=0.465, B=0.443
+Test std:  R=0.265, G=0.239, B=0.288
+
+Modellens dataflöde
+--------------------
+Modellen tränas endast på 256x256 tiles från train-splitten.
+Validation loss beräknas endast på tiles från val-splitten.
+Efter träningen testas modellen på både tiles och nedskalade hela bilder från test-splitten.
