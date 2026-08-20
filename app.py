@@ -3,6 +3,7 @@ import numpy as np
 import tensorflow as tf
 
 from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint
+from tensorflow.keras.initializers import GlorotUniform
 from tensorflow.keras.layers import (
     Concatenate,
     Conv2D,
@@ -64,6 +65,11 @@ def materialize_full_images(dataset):
     )
 
     return images, content_masks
+
+
+def create_kernel_initializer(seed_offset):
+    # Explicita heltals-seeds fungerar med både vanlig Keras och NGC tf_keras.
+    return GlorotUniform(seed=RANDOM_SEED + seed_offset)
 
 
 def create_fixed_noisy_images(clean_images, seed):
@@ -287,6 +293,7 @@ encoder_1 = Conv2D(
     kernel_size=3,
     padding="same",
     activation="relu",
+    kernel_initializer=create_kernel_initializer(0),
     name="encoder_1",
 )(input_image)
 x = MaxPooling2D(name="pool_1")(encoder_1)
@@ -296,6 +303,7 @@ encoder_2 = Conv2D(
     kernel_size=3,
     padding="same",
     activation="relu",
+    kernel_initializer=create_kernel_initializer(1),
     name="encoder_2",
 )(x)
 x = MaxPooling2D(name="pool_2")(encoder_2)
@@ -305,6 +313,7 @@ encoder_3 = Conv2D(
     kernel_size=3,
     padding="same",
     activation="relu",
+    kernel_initializer=create_kernel_initializer(2),
     name="encoder_3",
 )(x)
 x = MaxPooling2D(name="pool_3")(encoder_3)
@@ -319,6 +328,7 @@ x = Conv2D(
     kernel_size=3,
     padding="same",
     activation="relu",
+    kernel_initializer=create_kernel_initializer(3),
     name="bottleneck",
 )(x)
 
@@ -334,6 +344,7 @@ x = Conv2D(
     kernel_size=3,
     padding="same",
     activation="relu",
+    kernel_initializer=create_kernel_initializer(4),
     name="decoder_3",
 )(x)
 
@@ -344,6 +355,7 @@ x = Conv2D(
     kernel_size=3,
     padding="same",
     activation="relu",
+    kernel_initializer=create_kernel_initializer(5),
     name="decoder_2",
 )(x)
 
@@ -354,6 +366,7 @@ x = Conv2D(
     kernel_size=3,
     padding="same",
     activation="relu",
+    kernel_initializer=create_kernel_initializer(6),
     name="decoder_1",
 )(x)
 
@@ -361,6 +374,7 @@ output_image = Conv2D(
     3,
     kernel_size=1,
     activation="sigmoid",
+    kernel_initializer=create_kernel_initializer(7),
     name="output_image",
 )(x)
 
