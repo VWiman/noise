@@ -1,0 +1,4 @@
+# För NVIDIA-GPU:er före Blackwell, inte för compute capability 12.0.
+tensorflow[and-cuda]==2.18.1
+numpy==2.0.2
+matplotlib==3.10.9

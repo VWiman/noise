@@ -1,0 +1,47 @@
+# macOS och Windows
+.DS_Store
+._*
+Thumbs.db
+Desktop.ini
+
+# Lokala dataset
+/dataset/
+/data/
+
+# Genererade modeller, figurer och analyser
+/outputs/
+
+# Python-cache och testresultat
+__pycache__/
+*.py[cod]
+*.pyd
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Virtuella miljöer
+.venv/
+venv/
+env/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Editorinställningar
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Lokala miljövariabler och loggar
+.env
+.env.*
+!.env.example
+*.log
+
+# Python-paketering
+build/
+dist/
+*.egg-info/
