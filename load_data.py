@@ -29,9 +29,7 @@ def collect_image_paths():
     )
 
     if not image_paths:
-        raise FileNotFoundError(
-            f"Datasetmappen innehåller inga bilder: {DATASET_DIR}"
-        )
+        raise FileNotFoundError(f"Datasetmappen innehåller inga bilder: {DATASET_DIR}")
 
     return image_paths
 
@@ -45,20 +43,16 @@ def calculate_split_counts(num_images):
 
     if sum(split_percentages.values()) != 100:
         raise ValueError(
-            "TRAIN_PERCENT, VAL_PERCENT och TEST_PERCENT "
-            "måste tillsammans bli 100."
+            "TRAIN_PERCENT, VAL_PERCENT och TEST_PERCENT måste tillsammans bli 100."
         )
 
     if any(percent <= 0 for percent in split_percentages.values()):
         raise ValueError("Alla datasetandelar måste vara större än 0.")
 
     exact_counts = {
-        name: num_images * percent / 100
-        for name, percent in split_percentages.items()
+        name: num_images * percent / 100 for name, percent in split_percentages.items()
     }
-    split_counts = {
-        name: math.floor(count) for name, count in exact_counts.items()
-    }
+    split_counts = {name: math.floor(count) for name, count in exact_counts.items()}
 
     remaining_images = num_images - sum(split_counts.values())
     tie_priority = {"train": 0, "val": 1, "test": 2}
@@ -75,9 +69,7 @@ def calculate_split_counts(num_images):
         split_counts[split_name] += 1
 
     if any(count == 0 for count in split_counts.values()):
-        raise ValueError(
-            "Datasetet innehåller för få bilder för train, val och test."
-        )
+        raise ValueError("Datasetet innehåller för få bilder för train, val och test.")
 
     return split_counts
 

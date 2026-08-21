@@ -6,6 +6,7 @@ Desktop.ini
 
 # Lokala dataset
 /dataset/
+/dataset_stage_two/
 /data/
 
 # Python-cache och testresultat

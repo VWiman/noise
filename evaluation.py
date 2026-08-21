@@ -9,21 +9,38 @@ from config import (
     EVALUATION_SUMMARY_PATH,
     METRIC_COMPARISON_PATH,
     RESULTS_DIR,
+    STAGE_ONE_HISTORY_DATA_PATH,
+    STAGE_TWO_HISTORY_DATA_PATH,
     TILE_METRICS_PATH,
-    TRAINING_HISTORY_DATA_PATH,
     WHOLE_IMAGE_METRICS_PATH,
 )
 
 
-METRIC_KEYS = (
-    "noisy_mse",
-    "reconstruction_mse",
-    "noisy_mae",
-    "reconstruction_mae",
-    "noisy_psnr",
-    "reconstruction_psnr",
-    "noisy_ssim",
-    "reconstruction_ssim",
+VARIANT_NAMES = ("noisy", "stage_one", "stage_two")
+VARIANT_LABELS = {
+    "noisy": "Brusig baseline",
+    "stage_one": "Efter steg 1",
+    "stage_two": "Efter steg 2 (residual)",
+}
+METRIC_NAMES = ("mse", "mae", "psnr", "ssim")
+METRIC_KEYS = tuple(
+    f"{variant_name}_{metric_name}"
+    for variant_name in VARIANT_NAMES
+    for metric_name in METRIC_NAMES
+)
+COMPARISON_KEYS = (
+    "stage_one_mse_vs_noisy_percent",
+    "stage_two_mse_vs_noisy_percent",
+    "stage_two_mse_vs_stage_one_percent",
+    "stage_one_mae_vs_noisy_percent",
+    "stage_two_mae_vs_noisy_percent",
+    "stage_two_mae_vs_stage_one_percent",
+    "stage_one_psnr_vs_noisy",
+    "stage_two_psnr_vs_noisy",
+    "stage_two_psnr_vs_stage_one",
+    "stage_one_ssim_vs_noisy",
+    "stage_two_ssim_vs_noisy",
+    "stage_two_ssim_vs_stage_one",
 )
 
 
@@ -65,19 +82,9 @@ def calculate_batched_ssim(clean_images, compared_images, batch_size=16):
 
     for batch_start in range(0, len(clean_images), batch_size):
         batch_end = batch_start + batch_size
-        clean_batch = np.clip(
-            clean_images[batch_start:batch_end],
-            0.0,
-            1.0,
-        )
-        compared_batch = np.clip(
-            compared_images[batch_start:batch_end],
-            0.0,
-            1.0,
-        )
         batch_values = tf.image.ssim(
-            clean_batch,
-            compared_batch,
+            np.clip(clean_images[batch_start:batch_end], 0.0, 1.0),
+            np.clip(compared_images[batch_start:batch_end], 0.0, 1.0),
             max_val=1.0,
         )
         ssim_values.append(batch_values.numpy())
@@ -85,102 +92,123 @@ def calculate_batched_ssim(clean_images, compared_images, batch_size=16):
     return np.concatenate(ssim_values).astype(np.float64)
 
 
+def calculate_unmasked_metrics(clean_images, compared_images):
+    difference = compared_images - clean_images
+    axes = (1, 2, 3)
+    mse_values = np.mean(np.square(difference), axis=axes, dtype=np.float64)
+    mae_values = np.mean(np.abs(difference), axis=axes, dtype=np.float64)
+    psnr_values = -10.0 * np.log10(np.maximum(mse_values, 1e-12))
+    ssim_values = calculate_batched_ssim(clean_images, compared_images)
+
+    return mse_values, mae_values, psnr_values, ssim_values
+
+
+def calculate_masked_metrics(clean_images, compared_images, content_masks):
+    mse_values = []
+    mae_values = []
+    psnr_values = []
+    ssim_values = []
+
+    for clean_image, compared_image, content_mask in zip(
+        clean_images,
+        compared_images,
+        content_masks,
+    ):
+        channel_mask = np.broadcast_to(content_mask, clean_image.shape)
+        num_values = np.sum(channel_mask)
+        difference = compared_image - clean_image
+        mse = (
+            np.sum(
+                np.square(difference) * channel_mask,
+                dtype=np.float64,
+            )
+            / num_values
+        )
+        mae = (
+            np.sum(
+                np.abs(difference) * channel_mask,
+                dtype=np.float64,
+            )
+            / num_values
+        )
+        clean_content = crop_to_content(clean_image, content_mask)
+        compared_content = crop_to_content(compared_image, content_mask)
+
+        mse_values.append(mse)
+        mae_values.append(mae)
+        psnr_values.append(-10.0 * np.log10(max(mse, 1e-12)))
+        ssim_values.append(calculate_ssim(clean_content, compared_content))
+
+    return tuple(
+        np.asarray(values, dtype=np.float64)
+        for values in (mse_values, mae_values, psnr_values, ssim_values)
+    )
+
+
 def calculate_image_metrics(
     clean_images,
     noisy_images,
-    decoded_images,
+    stage_one_images,
+    stage_two_images,
     content_masks=None,
 ):
-    metric_values = {key: [] for key in METRIC_KEYS}
+    compared_variants = {
+        "noisy": noisy_images,
+        "stage_one": stage_one_images,
+        "stage_two": stage_two_images,
+    }
+    metric_values = {}
 
-    for image_index in range(len(clean_images)):
-        clean_image = clean_images[image_index]
-        noisy_image = noisy_images[image_index]
-        decoded_image = decoded_images[image_index]
-
+    for variant_name, compared_images in compared_variants.items():
         if content_masks is None:
-            channel_mask = None
-            num_values = clean_image.size
-            clean_for_ssim = clean_image
-            noisy_for_ssim = noisy_image
-            decoded_for_ssim = decoded_image
+            values = calculate_unmasked_metrics(clean_images, compared_images)
         else:
-            content_mask = content_masks[image_index]
-            channel_mask = np.broadcast_to(content_mask, clean_image.shape)
-            num_values = np.sum(channel_mask)
-            clean_for_ssim = crop_to_content(clean_image, content_mask)
-            noisy_for_ssim = crop_to_content(noisy_image, content_mask)
-            decoded_for_ssim = crop_to_content(decoded_image, content_mask)
-
-        noisy_difference = noisy_image - clean_image
-        reconstruction_difference = decoded_image - clean_image
-
-        if channel_mask is None:
-            noisy_mse = np.sum(
-                np.square(noisy_difference),
-                dtype=np.float64,
-            ) / num_values
-            reconstruction_mse = np.sum(
-                np.square(reconstruction_difference),
-                dtype=np.float64,
-            ) / num_values
-            noisy_mae = np.sum(
-                np.abs(noisy_difference),
-                dtype=np.float64,
-            ) / num_values
-            reconstruction_mae = np.sum(
-                np.abs(reconstruction_difference),
-                dtype=np.float64,
-            ) / num_values
-        else:
-            noisy_mse = np.sum(
-                np.square(noisy_difference) * channel_mask,
-                dtype=np.float64,
-            ) / num_values
-            reconstruction_mse = np.sum(
-                np.square(reconstruction_difference) * channel_mask,
-                dtype=np.float64,
-            ) / num_values
-            noisy_mae = np.sum(
-                np.abs(noisy_difference) * channel_mask,
-                dtype=np.float64,
-            ) / num_values
-            reconstruction_mae = np.sum(
-                np.abs(reconstruction_difference) * channel_mask,
-                dtype=np.float64,
-            ) / num_values
-
-        metric_values["noisy_mse"].append(noisy_mse)
-        metric_values["reconstruction_mse"].append(reconstruction_mse)
-        metric_values["noisy_mae"].append(noisy_mae)
-        metric_values["reconstruction_mae"].append(reconstruction_mae)
-        metric_values["noisy_psnr"].append(
-            -10.0 * np.log10(max(noisy_mse, 1e-12))
-        )
-        metric_values["reconstruction_psnr"].append(
-            -10.0 * np.log10(max(reconstruction_mse, 1e-12))
-        )
-        if content_masks is not None:
-            metric_values["noisy_ssim"].append(
-                calculate_ssim(clean_for_ssim, noisy_for_ssim)
-            )
-            metric_values["reconstruction_ssim"].append(
-                calculate_ssim(clean_for_ssim, decoded_for_ssim)
+            values = calculate_masked_metrics(
+                clean_images,
+                compared_images,
+                content_masks,
             )
 
-    if content_masks is None:
-        metric_values["noisy_ssim"] = calculate_batched_ssim(
-            clean_images,
-            noisy_images,
-        )
-        metric_values["reconstruction_ssim"] = calculate_batched_ssim(
-            clean_images,
-            decoded_images,
-        )
+        for metric_name, metric_array in zip(METRIC_NAMES, values):
+            metric_values[f"{variant_name}_{metric_name}"] = metric_array
 
+    return metric_values
+
+
+def percent_reduction(baseline, candidate):
+    return (baseline - candidate) / max(abs(baseline), 1e-12) * 100.0
+
+
+def calculate_comparisons(values):
     return {
-        key: np.asarray(values, dtype=np.float64)
-        for key, values in metric_values.items()
+        "stage_one_mse_vs_noisy_percent": percent_reduction(
+            values["noisy_mse"], values["stage_one_mse"]
+        ),
+        "stage_two_mse_vs_noisy_percent": percent_reduction(
+            values["noisy_mse"], values["stage_two_mse"]
+        ),
+        "stage_two_mse_vs_stage_one_percent": percent_reduction(
+            values["stage_one_mse"], values["stage_two_mse"]
+        ),
+        "stage_one_mae_vs_noisy_percent": percent_reduction(
+            values["noisy_mae"], values["stage_one_mae"]
+        ),
+        "stage_two_mae_vs_noisy_percent": percent_reduction(
+            values["noisy_mae"], values["stage_two_mae"]
+        ),
+        "stage_two_mae_vs_stage_one_percent": percent_reduction(
+            values["stage_one_mae"], values["stage_two_mae"]
+        ),
+        "stage_one_psnr_vs_noisy": (values["stage_one_psnr"] - values["noisy_psnr"]),
+        "stage_two_psnr_vs_noisy": (values["stage_two_psnr"] - values["noisy_psnr"]),
+        "stage_two_psnr_vs_stage_one": (
+            values["stage_two_psnr"] - values["stage_one_psnr"]
+        ),
+        "stage_one_ssim_vs_noisy": (values["stage_one_ssim"] - values["noisy_ssim"]),
+        "stage_two_ssim_vs_noisy": (values["stage_two_ssim"] - values["noisy_ssim"]),
+        "stage_two_ssim_vs_stage_one": (
+            values["stage_two_ssim"] - values["stage_one_ssim"]
+        ),
     }
 
 
@@ -191,24 +219,7 @@ def summarize_metrics(metric_values):
         summary[metric_name] = float(np.mean(values))
         summary[f"{metric_name}_std"] = float(np.std(values))
 
-    summary["improvement"] = (
-        summary["noisy_mse"] - summary["reconstruction_mse"]
-    )
-    summary["relative_improvement"] = (
-        summary["improvement"] / summary["noisy_mse"] * 100.0
-    )
-    summary["mae_improvement"] = (
-        summary["noisy_mae"] - summary["reconstruction_mae"]
-    )
-    summary["mae_relative_improvement"] = (
-        summary["mae_improvement"] / summary["noisy_mae"] * 100.0
-    )
-    summary["psnr_improvement"] = (
-        summary["reconstruction_psnr"] - summary["noisy_psnr"]
-    )
-    summary["ssim_improvement"] = (
-        summary["reconstruction_ssim"] - summary["noisy_ssim"]
-    )
+    summary.update(calculate_comparisons(summary))
 
     return summary
 
@@ -219,14 +230,7 @@ def summarize_metrics(metric_values):
 
 
 def save_metrics_csv(output_path, sample_names, metric_values):
-    fieldnames = [
-        "sample",
-        *METRIC_KEYS,
-        "mse_improvement_percent",
-        "mae_improvement_percent",
-        "psnr_improvement",
-        "ssim_improvement",
-    ]
+    fieldnames = ["sample", *METRIC_KEYS, *COMPARISON_KEYS]
 
     with output_path.open("w", encoding="utf-8", newline="") as output_file:
         writer = csv.DictWriter(output_file, fieldnames=fieldnames)
@@ -235,36 +239,14 @@ def save_metrics_csv(output_path, sample_names, metric_values):
         for sample_index, sample_name in enumerate(sample_names):
             row = {
                 "sample": sample_name,
-                **{
-                    key: float(metric_values[key][sample_index])
-                    for key in METRIC_KEYS
-                },
+                **{key: float(metric_values[key][sample_index]) for key in METRIC_KEYS},
             }
-            row["mse_improvement_percent"] = (
-                (row["noisy_mse"] - row["reconstruction_mse"])
-                / row["noisy_mse"]
-                * 100.0
-            )
-            row["mae_improvement_percent"] = (
-                (row["noisy_mae"] - row["reconstruction_mae"])
-                / row["noisy_mae"]
-                * 100.0
-            )
-            row["psnr_improvement"] = (
-                row["reconstruction_psnr"] - row["noisy_psnr"]
-            )
-            row["ssim_improvement"] = (
-                row["reconstruction_ssim"] - row["noisy_ssim"]
-            )
+            row.update(calculate_comparisons(row))
             writer.writerow(row)
 
 
-def save_training_history(history):
-    with TRAINING_HISTORY_DATA_PATH.open(
-        "w",
-        encoding="utf-8",
-        newline="",
-    ) as output_file:
+def save_training_history(history, output_path):
+    with output_path.open("w", encoding="utf-8", newline="") as output_file:
         writer = csv.writer(output_file)
         writer.writerow(["epoch", "loss", "val_loss"])
 
@@ -275,36 +257,61 @@ def save_training_history(history):
             writer.writerow([epoch_index, loss, val_loss])
 
 
+def describe_change(value, unit=""):
+    if value > 0:
+        result = "förbättring"
+    elif value < 0:
+        result = "försämring"
+    else:
+        result = "oförändrat"
+
+    return f"{value:+.3f}{unit} ({result})"
+
+
 def format_summary_section(title, summary):
-    return [
+    lines = [
         title,
         "-" * len(title),
         f"Antal exempel: {summary['count']}",
-        f"MSE, brusig:        {summary['noisy_mse']:.6f} "
-        f"± {summary['noisy_mse_std']:.6f}",
-        f"MSE, rekonstruerad: {summary['reconstruction_mse']:.6f} "
-        f"± {summary['reconstruction_mse_std']:.6f}",
-        f"Relativ MSE-förbättring: {summary['relative_improvement']:.2f}%",
-        f"MAE, brusig:        {summary['noisy_mae']:.6f} "
-        f"± {summary['noisy_mae_std']:.6f}",
-        f"MAE, rekonstruerad: {summary['reconstruction_mae']:.6f} "
-        f"± {summary['reconstruction_mae_std']:.6f}",
-        f"Relativ MAE-förbättring: {summary['mae_relative_improvement']:.2f}%",
-        f"PSNR, brusig:        {summary['noisy_psnr']:.3f} dB",
-        f"PSNR, rekonstruerad: {summary['reconstruction_psnr']:.3f} dB",
-        f"PSNR-förbättring:     {summary['psnr_improvement']:.3f} dB",
-        f"SSIM, brusig:        {summary['noisy_ssim']:.4f}",
-        f"SSIM, rekonstruerad: {summary['reconstruction_ssim']:.4f}",
-        f"SSIM-förbättring:     {summary['ssim_improvement']:.4f}",
     ]
+
+    for metric_name, label, unit in (
+        ("mse", "MSE", ""),
+        ("mae", "MAE", ""),
+        ("psnr", "PSNR", " dB"),
+        ("ssim", "SSIM", ""),
+    ):
+        lines.extend(
+            [
+                f"{label}, brusig:      {summary[f'noisy_{metric_name}']:.6f}{unit}",
+                f"{label}, efter steg 1: "
+                f"{summary[f'stage_one_{metric_name}']:.6f}{unit}",
+                f"{label}, efter steg 2: "
+                f"{summary[f'stage_two_{metric_name}']:.6f}{unit}",
+            ]
+        )
+
+    lines.extend(
+        [
+            "",
+            "Steg två jämfört med steg ett",
+            f"MSE:  {describe_change(summary['stage_two_mse_vs_stage_one_percent'], '%')}",
+            f"MAE:  {describe_change(summary['stage_two_mae_vs_stage_one_percent'], '%')}",
+            f"PSNR: {describe_change(summary['stage_two_psnr_vs_stage_one'], ' dB')}",
+            f"SSIM: {describe_change(summary['stage_two_ssim_vs_stage_one'])}",
+        ]
+    )
+
+    return lines
 
 
 def save_evaluation_summary(tile_summary, whole_image_summary):
     summary_lines = [
-        "Utvärderingsrapport för Denoising U-Net",
-        "========================================",
+        "Utvärderingsrapport för tvåstegs-U-Net med residualförfining",
+        "=================================================================",
         "",
         "MSE och MAE ska minska. PSNR och SSIM ska öka.",
+        "Positiva jämförelsevärden betyder förbättring.",
         "Värdena redovisas som medelvärden per exempel.",
         "",
         *format_summary_section("Testresultat: tiles", tile_summary),
@@ -325,16 +332,12 @@ def save_metric_comparison(tile_summary, whole_image_summary):
     summaries = (tile_summary, whole_image_summary)
     labels = ("Tiles", "Hela bilder")
     metric_definitions = (
-        ("MSE", "noisy_mse", "reconstruction_mse", "Lägre är bättre"),
-        ("MAE", "noisy_mae", "reconstruction_mae", "Lägre är bättre"),
-        (
-            "PSNR (dB)",
-            "noisy_psnr",
-            "reconstruction_psnr",
-            "Högre är bättre",
-        ),
-        ("SSIM", "noisy_ssim", "reconstruction_ssim", "Högre är bättre"),
+        ("MSE", "mse", "Lägre är bättre"),
+        ("MAE", "mae", "Lägre är bättre"),
+        ("PSNR (dB)", "psnr", "Högre är bättre"),
+        ("SSIM", "ssim", "Högre är bättre"),
     )
+    colors = ("#E45756", "#4C78A8", "#54A24B")
 
     figure, axes = plt.subplots(
         2,
@@ -343,48 +346,36 @@ def save_metric_comparison(tile_summary, whole_image_summary):
         constrained_layout=True,
     )
     x_positions = np.arange(len(labels))
-    bar_width = 0.36
+    bar_width = 0.24
 
-    for axis, metric_definition in zip(axes.reshape(-1), metric_definitions):
-        title, noisy_key, reconstruction_key, direction = metric_definition
-        noisy_values = [summary[noisy_key] for summary in summaries]
-        reconstruction_values = [
-            summary[reconstruction_key] for summary in summaries
-        ]
+    for axis, (title, metric_name, direction) in zip(
+        axes.reshape(-1), metric_definitions
+    ):
+        for variant_index, variant_name in enumerate(VARIANT_NAMES):
+            values = [summary[f"{variant_name}_{metric_name}"] for summary in summaries]
+            positions = x_positions + (variant_index - 1) * bar_width
+            bars = axis.bar(
+                positions,
+                values,
+                bar_width,
+                label=VARIANT_LABELS[variant_name],
+                color=colors[variant_index],
+            )
+            axis.bar_label(bars, fmt="%.3f", fontsize=7, padding=3)
 
-        noisy_bars = axis.bar(
-            x_positions - bar_width / 2,
-            noisy_values,
-            bar_width,
-            label="Brusig baseline",
-            color="#E45756",
-        )
-        reconstruction_bars = axis.bar(
-            x_positions + bar_width / 2,
-            reconstruction_values,
-            bar_width,
-            label="Rekonstruerad",
-            color="#4C78A8",
-        )
-        axis.bar_label(noisy_bars, fmt="%.3f", fontsize=8, padding=3)
-        axis.bar_label(
-            reconstruction_bars,
-            fmt="%.3f",
-            fontsize=8,
-            padding=3,
-        )
         axis.set_xticks(x_positions, labels)
         axis.set_title(f"{title} – {direction}")
         axis.grid(axis="y", alpha=0.3)
 
     axes[0, 0].legend()
-    figure.suptitle("Baseline jämfört med U-Net-rekonstruktion", fontsize=16)
+    figure.suptitle("Baseline, steg ett och steg två", fontsize=16)
     figure.savefig(METRIC_COMPARISON_PATH, dpi=300, bbox_inches="tight")
     plt.close(figure)
 
 
 def save_evaluation_results(
-    history,
+    stage_one_history,
+    stage_two_history,
     tile_metric_values,
     whole_image_metric_values,
     tile_summary,
@@ -398,7 +389,8 @@ def save_evaluation_results(
     ]
     whole_image_names = [Path(path).name for path in whole_image_paths]
 
-    save_training_history(history)
+    save_training_history(stage_one_history, STAGE_ONE_HISTORY_DATA_PATH)
+    save_training_history(stage_two_history, STAGE_TWO_HISTORY_DATA_PATH)
     save_metrics_csv(TILE_METRICS_PATH, tile_names, tile_metric_values)
     save_metrics_csv(
         WHOLE_IMAGE_METRICS_PATH,
@@ -411,9 +403,10 @@ def save_evaluation_results(
     print(
         f"\nUtvärdering sparad\n"
         f"-------------------\n"
-        f"Sammanfattning:    {EVALUATION_SUMMARY_PATH}\n"
-        f"Tile-mått:         {TILE_METRICS_PATH}\n"
-        f"Helbildsmått:      {WHOLE_IMAGE_METRICS_PATH}\n"
-        f"Träningshistorik: {TRAINING_HISTORY_DATA_PATH}\n"
-        f"Jämförelsefigur:  {METRIC_COMPARISON_PATH}"
+        f"Sammanfattning:       {EVALUATION_SUMMARY_PATH}\n"
+        f"Tile-mått:            {TILE_METRICS_PATH}\n"
+        f"Helbildsmått:         {WHOLE_IMAGE_METRICS_PATH}\n"
+        f"Historik, steg ett:   {STAGE_ONE_HISTORY_DATA_PATH}\n"
+        f"Historik, steg två:   {STAGE_TWO_HISTORY_DATA_PATH}\n"
+        f"Jämförelsefigur:      {METRIC_COMPARISON_PATH}"
     )

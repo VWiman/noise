@@ -1,37 +1,50 @@
-Utvärderingsrapport för Denoising U-Net
-========================================
+Utvärderingsrapport för tvåstegs-U-Net med residualförfining
+=================================================================
 
 MSE och MAE ska minska. PSNR och SSIM ska öka.
+Positiva jämförelsevärden betyder förbättring.
 Värdena redovisas som medelvärden per exempel.
 
 Testresultat: tiles
 -------------------
 Antal exempel: 129
-MSE, brusig:        0.032434 ± 0.003392
-MSE, rekonstruerad: 0.001794 ± 0.001377
-Relativ MSE-förbättring: 94.47%
-MAE, brusig:        0.143105 ± 0.010331
-MAE, rekonstruerad: 0.029391 ± 0.010770
-Relativ MAE-förbättring: 79.46%
-PSNR, brusig:        14.915 dB
-PSNR, rekonstruerad: 28.536 dB
-PSNR-förbättring:     13.622 dB
-SSIM, brusig:        0.1350
-SSIM, rekonstruerad: 0.7749
-SSIM-förbättring:     0.6399
+MSE, brusig:      0.032434
+MSE, efter steg 1: 0.001779
+MSE, efter steg 2: 0.001754
+MAE, brusig:      0.143105
+MAE, efter steg 1: 0.029295
+MAE, efter steg 2: 0.029209
+PSNR, brusig:      14.914781 dB
+PSNR, efter steg 1: 28.531777 dB
+PSNR, efter steg 2: 28.587548 dB
+SSIM, brusig:      0.135006
+SSIM, efter steg 1: 0.777631
+SSIM, efter steg 2: 0.777138
+
+Steg två jämfört med steg ett
+MSE:  +1.361% (förbättring)
+MAE:  +0.295% (förbättring)
+PSNR: +0.056 dB (förbättring)
+SSIM: -0.000 (försämring)
 
 Testresultat: hela bilder
 -------------------------
 Antal exempel: 12
-MSE, brusig:        0.032815 ± 0.002344
-MSE, rekonstruerad: 0.002410 ± 0.001048
-Relativ MSE-förbättring: 92.65%
-MAE, brusig:        0.144519 ± 0.006411
-MAE, rekonstruerad: 0.035029 ± 0.008604
-Relativ MAE-förbättring: 75.76%
-PSNR, brusig:        14.850 dB
-PSNR, rekonstruerad: 26.554 dB
-PSNR-förbättring:     11.703 dB
-SSIM, brusig:        0.1928
-SSIM, rekonstruerad: 0.7627
-SSIM-förbättring:     0.5699
+MSE, brusig:      0.032815
+MSE, efter steg 1: 0.002373
+MSE, efter steg 2: 0.002355
+MAE, brusig:      0.144519
+MAE, efter steg 1: 0.034645
+MAE, efter steg 2: 0.034693
+PSNR, brusig:      14.850485 dB
+PSNR, efter steg 1: 26.632858 dB
+PSNR, efter steg 2: 26.650959 dB
+SSIM, brusig:      0.192805
+SSIM, efter steg 1: 0.766126
+SSIM, efter steg 2: 0.765766
+
+Steg två jämfört med steg ett
+MSE:  +0.750% (förbättring)
+MAE:  -0.138% (försämring)
+PSNR: +0.018 dB (förbättring)
+SSIM: -0.000 (försämring)
