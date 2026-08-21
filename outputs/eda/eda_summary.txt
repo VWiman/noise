@@ -24,6 +24,7 @@ Test std:  R=0.265, G=0.239, B=0.288
 
 Modellens dataflöde
 --------------------
-Modellen tränas endast på 256x256 tiles från train-splitten.
+Steg ett tränas endast på 256x256 tiles från train-splitten.
+Steg två tränas på rekonstruktioner av samma train-tiles.
 Validation loss beräknas endast på tiles från val-splitten.
-Efter träningen testas modellen på både tiles och nedskalade hela bilder från test-splitten.
+Efter båda stegen testas kedjan på både tiles och nedskalade hela bilder från test-splitten.

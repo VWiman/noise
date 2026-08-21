@@ -175,9 +175,7 @@ def save_sample_tiles(train_tiles):
 
 
 def format_image_dimensions(image_metadata, split_name):
-    split_metadata = [
-        item for item in image_metadata if item["split"] == split_name
-    ]
+    split_metadata = [item for item in image_metadata if item["split"] == split_name]
     heights = np.array([item["height"] for item in split_metadata])
     widths = np.array([item["width"] for item in split_metadata])
 
@@ -251,9 +249,10 @@ def save_eda_summary(
             "",
             "Modellens dataflöde",
             "--------------------",
-            "Modellen tränas endast på 256x256 tiles från train-splitten.",
+            "Steg ett tränas endast på 256x256 tiles från train-splitten.",
+            "Steg två tränas på rekonstruktioner av samma train-tiles.",
             "Validation loss beräknas endast på tiles från val-splitten.",
-            "Efter träningen testas modellen på både tiles och nedskalade "
+            "Efter båda stegen testas kedjan på både tiles och nedskalade "
             "hela bilder från test-splitten.",
         ]
     )
